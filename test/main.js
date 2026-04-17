@@ -15,3 +15,8 @@ knot.send_json({
     "name": "prueba", 
     "port": 1234 
 });
+
+setTimeout(()=>{
+
+knot.send_bytes('12D3KooWLXXDhgg3VuG1ZRXp5rQ8hZAUwtygB9kSeUUtuvd1cZGR', Buffer.from("Hola", 'utf-8'));
+}, 1000)

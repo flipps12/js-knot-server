@@ -1,6 +1,8 @@
 // src/client.ts
 import net from 'net';
 import { EventEmitter } from 'node:events';
+import bs58 from 'bs58';
+import { createHash } from 'crypto';
 
 const MAX_PAYLOAD_SIZE = 15 * 1024 * 1024;
 
@@ -18,6 +20,7 @@ export class KnotClient extends EventEmitter {
     server_client_byte: net.Server | undefined;
     private buffer: string = "";
     peerid: String | undefined;
+    appId: bigint | undefined;
 
 
     constructor() {
@@ -26,8 +29,6 @@ export class KnotClient extends EventEmitter {
         this.connectByteSocket();
         this.connectJsonSocket();
 
-        this.setupListeners();
-
         // Set
         this.peerid = "";
     }
@@ -35,8 +36,8 @@ export class KnotClient extends EventEmitter {
 
     connectJsonSocket() {
         this.socket_json = net.createConnection({ port: 12012 }, () => {
-            console.log('Connected to server');
             this.send_json({ "command": "status" });
+            this.setupListeners();
         });
     }
 
@@ -58,7 +59,7 @@ export class KnotClient extends EventEmitter {
         this.socket_json.write(json + "\n");
     }
 
-    public async send_bytes(peerId: bigint, appId: bigint, payload: Buffer | Uint8Array): Promise<void> {
+    public async send_bytes(peerInput: string, payload: Buffer | Uint8Array): Promise<void> {
         if (!this.socket_byte || this.socket_byte.destroyed) {
             throw new Error("Knot: Socket de bytes no conectado");
         }
@@ -66,6 +67,12 @@ export class KnotClient extends EventEmitter {
         if (payload.length > MAX_PAYLOAD_SIZE) {
             throw new Error(`Knot: El payload excede el límite de 15MB (${payload.length} bytes)`);
         }
+
+        if (this.appId == undefined) {
+            throw new Error(`Knot: AppId not found`);
+        }
+
+        const peerId = getPeerIdBigInt(peerInput);
 
         try {
             // Crear header de 24 bytes (Big Endian)
@@ -75,7 +82,7 @@ export class KnotClient extends EventEmitter {
             header.writeUInt8(1, 0);          // Versión
             header.writeUInt8(1, 1);          // Flag
             header.writeBigUInt64BE(peerId, 2); // Peer ID
-            header.writeBigUInt64BE(appId, 10); // App ID
+            header.writeBigUInt64BE(this.appId, 10); // App ID
             header.writeUInt32BE(payload.length, 18); // Payload Size
             header.writeUInt16BE(0, 22);      // Reservado
 
@@ -100,7 +107,7 @@ export class KnotClient extends EventEmitter {
             // 1. Agregamos lo nuevo al acumulador
             this.buffer += chunk.toString('utf8');
 
-            // 2. Procesamos el buffer buscando nuestro delimitador (ej: salto de línea)
+            // Buscar salto de linea
             let boundary = this.buffer.indexOf('\n');
 
             while (boundary !== -1) {
@@ -116,7 +123,11 @@ export class KnotClient extends EventEmitter {
             }
         });
 
-        this.socket_json?.on('end', () => console.log('Client disconnected'));
+        this.socket_json?.on('end', () => console.log('Socket Json disconnected'));
+
+        this.socket_json?.on('error', (err) => {
+            console.log('Socket error:', err);
+        });
 
         // Socket to send packets
         this.socket_byte?.on('end', () => console.log('Socket Byte disconnected'));
@@ -126,12 +137,19 @@ export class KnotClient extends EventEmitter {
             console.log(chunk);
         });
 
-        this.socket_client_byte?.on('end', () => console.log('Client disconnected'));
+        this.socket_client_byte?.on('end', () => console.log('Socket client disconnected'));
     }
 
     private handleMessage(raw: string) {
         try {
             const data = JSON.parse(raw);
+
+            if (data.error != "") throw new Error(`Knot: Error on handle message: ${data.error}`);
+            switch (data.command) {
+                case "register":
+                    this.appId = BigInt(data.response);
+                    break;
+            }
             
             // RE-EMISIÓN DE EVENTOS:
             // Emitimos un evento genérico
@@ -149,3 +167,31 @@ export class KnotClient extends EventEmitter {
 
 }
 
+function getPeerIdBigInt(peerInput: string): bigint {
+    try {
+        // 1. Intentar decodificar como Base58
+        const decoded = bs58.decode(peerInput);
+        
+        // Tomar los últimos 8 bytes
+        let relevantBytes: Uint8Array;
+        if (decoded.length >= 8) {
+            relevantBytes = decoded.slice(-8);
+        } else {
+            // Padding si es muy corto
+            relevantBytes = new Uint8Array(8);
+            relevantBytes.set(decoded, 8 - decoded.length);
+        }
+        
+        // Convertir bytes (Big Endian) a BigInt
+        const view = new DataView(relevantBytes.buffer, relevantBytes.byteOffset, relevantBytes.byteLength);
+        return view.getBigUint64(0, false); // false = Big Endian
+
+    } catch (e) {
+        // 2. Si falla el Base58, es un Alias. Usamos SHA-256
+        const hash = createHash('sha256').update(peerInput).digest();
+        const relevantBytes = hash.slice(0, 8);
+        
+        const view = new DataView(relevantBytes.buffer, relevantBytes.byteOffset, relevantBytes.byteLength);
+        return view.getBigUint64(0, false);
+    }
+}
