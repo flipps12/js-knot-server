@@ -37,15 +37,37 @@ knot.send_json({
 // knot.send_bytes('12D3KooWLXXDhgg3VuG1ZRXp5rQ8hZAUwtygB9kSeUUtuvd1cZGR', Buffer.from("Hola", 'utf-8'));
 // }, 1000)
 
-rl.question('Connect to: ', (peer) => {
-    console.log(`Sending command Connect ${peer}`);
+// rl.question('Connect to: ', (peer) => {
+//     console.log(`Sending command Connect ${peer}`);
+//     while (true) {
+//         rl.question('Connect to: ', (message) => {
+//             // console.log(`Sending command Connect ${mesage}`);
+//             knot.send_bytes(peer, Buffer.from(message, 'utf-8'));
+//             rl.close();
+//         });
+//     }
+// });
+
+
+const ask = (query) => new Promise((resolve) => rl.question(query, resolve));
+
+async function mainLoop() {
+    const peer = await ask('Connect to Peer ID: ');
+    console.log(`Conectado a ${peer}. Escribí tus mensajes:`);
+
     while (true) {
-        rl.question('Connect to: ', (message) => {
-            // console.log(`Sending command Connect ${mesage}`);
-            knot.send_bytes(peer, Buffer.from(message, 'utf-8'));
-            rl.close();
-        });
+        const message = await ask('> ');
+        
+        if (message.toLowerCase() === 'quit') break;
 
+        try {
+            await knot.send_bytes(peer, Buffer.from(message, 'utf-8'));
+        } catch (err) {
+            console.error("Fallo en el SDK:", err.message);
+        }
     }
-});
 
+    rl.close();
+}
+
+mainLoop();
