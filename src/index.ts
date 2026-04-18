@@ -165,7 +165,6 @@ export class KnotClient extends EventEmitter {
     private handleMessageByte(raw: Buffer) {
         try {
             this.emit('byte', raw.toString('utf8'));
-            console.log(raw.toString('utf8'));
         } catch (e) {
             this.emit('error', new Error("Fallo al parsear mensaje de Knot " + e));
         }

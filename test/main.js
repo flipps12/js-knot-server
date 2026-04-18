@@ -10,7 +10,7 @@ knot.on('message', (msg) => {
 });
 
 knot.on('byte', (msg) => {
-    console.log("Mensaje entrante:", msg);
+    console.log("Peer:", msg);
 });
 
 const rl = readline.createInterface({
