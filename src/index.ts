@@ -23,17 +23,12 @@ export class KnotClient extends EventEmitter {
     peerid: String | undefined;
     appId: bigint | undefined;
 
-
     constructor() {
         super();
         this.setByteServer();
         this.connectByteSocket();
         this.connectJsonSocket();
-
-        // Set
-        this.peerid = "";
     }
-
 
     connectJsonSocket() {
         this.socket_json = net.createConnection({ port: 12012 }, () => {
@@ -60,8 +55,6 @@ export class KnotClient extends EventEmitter {
         });
 
         this.server_client_byte.unref();
-        
-        // El LISTEN va afuera del callback, se ejecuta al instanciar la clase
         this.server_client_byte.listen(8124, () => {
             console.log('[JS-Knot] Servidor de bytes escuchando en puerto 8124');
         });
@@ -148,15 +141,11 @@ export class KnotClient extends EventEmitter {
                     break;
             }
 
-            // RE-EMISIÓN DE EVENTOS:
-            // Emitimos un evento genérico
             this.emit('message', data);
 
-            // Emitimos eventos específicos basados en el contenido del JSON
-            // Si el daemon de Rust envía { "type": "auth_success", "payload": {...} }
-            if (data.type) {
-                this.emit(data.type, data.payload || data);
-            }
+            // if (data.type) {
+            //     this.emit(data.type, data.payload || data);
+            // }
         } catch (e) {
             this.emit('error', new Error("Fallo al parsear mensaje de Knot " + e));
         }
@@ -173,29 +162,20 @@ export class KnotClient extends EventEmitter {
 
 function getPeerIdBigInt(peerInput: string): bigint {
     try {
-        // 1. Intentar decodificar como Base58
         const decoded = bs58.decode(peerInput);
 
-        // Tomar los últimos 8 bytes
         let relevantBytes: Uint8Array;
         if (decoded.length >= 8) {
             relevantBytes = decoded.slice(-8);
         } else {
-            // Padding si es muy corto
             relevantBytes = new Uint8Array(8);
             relevantBytes.set(decoded, 8 - decoded.length);
         }
 
-        // Convertir bytes (Big Endian) a BigInt
         const view = new DataView(relevantBytes.buffer, relevantBytes.byteOffset, relevantBytes.byteLength);
         return view.getBigUint64(0, false); // false = Big Endian
 
     } catch (e) {
-        // 2. Si falla el Base58, es un Alias. Usamos SHA-256
-        const hash = createHash('sha256').update(peerInput).digest();
-        const relevantBytes = hash.slice(0, 8);
-
-        const view = new DataView(relevantBytes.buffer, relevantBytes.byteOffset, relevantBytes.byteLength);
-        return view.getBigUint64(0, false);
+        throw new Error("Peer parsed error");
     }
 }

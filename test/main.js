@@ -62,6 +62,9 @@ async function mainLoop() {
 
         try {
             await knot.send_bytes(peer, Buffer.from(message, 'utf-8'));
+            // for (let i = 0; i < 10000; i++) {
+            //     await knot.send_bytes(peer, Buffer.from(` test ${i}`, 'utf-8'));
+            // }
         } catch (err) {
             console.error("Fallo en el SDK:", err.message);
         }
